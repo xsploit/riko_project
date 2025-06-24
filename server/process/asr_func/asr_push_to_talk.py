@@ -3,7 +3,6 @@ import sounddevice as sd
 import soundfile as sf
 from faster_whisper import WhisperModel
 
-
 def record_and_transcribe(model, output_file="recording.wav", samplerate=44100):
     """
     Simple push-to-talk recorder: record -> save -> transcribe -> return text
@@ -40,6 +39,7 @@ def record_and_transcribe(model, output_file="recording.wav", samplerate=44100):
 
 # Example usage
 if __name__ == "__main__":
-    model = WhisperModel("base.en", device="cuda", compute_type="float16")
+    model = WhisperModel("base.en", device="cpu", compute_type="float32")
     result = record_and_transcribe(model)
     print(f"Got: '{result}'")
+    

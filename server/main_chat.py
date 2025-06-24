@@ -2,7 +2,7 @@ from faster_whisper import WhisperModel
 from process.asr_func.asr_push_to_talk import record_and_transcribe
 from process.llm_funcs.llm_scr import llm_response
 from process.tts_func.sovits_ping import sovits_gen, play_audio
-
+from pathlib import Path
 import os
 import time
 ### transcribe audio 
@@ -16,13 +16,11 @@ def get_wav_duration(path):
 
 
 print(' \n ========= Starting Chat... ================ \n')
-whisper_model = WhisperModel("base.en", device="cuda", compute_type="float16")
-
-
+whisper_model = WhisperModel("base.en", device="cpu", compute_type="float32")
 
 while True:
 
-    conversation_recording = "/home/rayenfeng/riko_v1/conversation.wav"
+    conversation_recording = output_wav_path = Path("audio") / "conversation.wav"
 
     # record_on_speech(
     #         output_file=conversation_recording,
@@ -53,8 +51,8 @@ while True:
     # 1. Generate a unique filename
     uid = uuid.uuid4().hex
     filename = f"output_{uid}.wav"
-    output_wav_path = f"./audio/{filename}"
-
+    output_wav_path = Path("audio") / filename
+    output_wav_path.parent.mkdir(parents=True, exist_ok=True)
 
     # generate audio and save it to client/audio 
     gen_aud_path = sovits_gen(tts_read_text,output_wav_path)
