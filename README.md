@@ -172,7 +172,7 @@ For VTubers wanting to use Riko with avatar lip-sync:
 
 ## 🧑‍🎤 Credits
 
-**Original Project:** [GPT-SoVITS Project](https://github.com/RVC-Boss/GPT-SoVITS) by Just Rayen
+**Original Project:** (https://github.com/rayenfeng/riko_project) by Just Rayen
 **Fork & Major Modifications:** Subsect with Claude as coding partner
 
 **Powered By:**
