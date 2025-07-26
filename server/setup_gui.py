@@ -1,15 +1,18 @@
 import tkinter as tk
-from tkinter import ttk, messagebox
+from tkinter import ttk, messagebox, filedialog
 import yaml
 from pathlib import Path
 import json
+import os
+import soundfile as sf
+import sounddevice as sd
 from audio_utils import get_audio_devices, get_device_display_name, get_default_devices
 
 class ProviderSetupGUI:
     def __init__(self):
         self.root = tk.Tk()
         self.root.title("Riko Chat - Complete Setup")
-        self.root.geometry("700x600")
+        self.root.geometry("800x800")
         
         # Get config path
         self.config_path = Path(__file__).parent.parent / 'character_config.yaml'
@@ -19,6 +22,9 @@ class ProviderSetupGUI:
         
         # Load audio devices
         self.load_audio_devices()
+        
+        # Audio processing state
+        self.current_audio_file = None
         
         # Create GUI
         self.create_widgets()
@@ -139,6 +145,61 @@ class ProviderSetupGUI:
         
         self.audio_frame.columnconfigure(1, weight=1)
         
+        # GPT-SoVITS Configuration Frame
+        self.sovits_frame = ttk.LabelFrame(self.root, text="GPT-SoVITS Voice Configuration")
+        self.sovits_frame.pack(pady=10, padx=20, fill="x")
+        
+        # Reference audio file path
+        ttk.Label(self.sovits_frame, text="Reference Audio File:").grid(row=0, column=0, sticky="w", padx=5, pady=5)
+        self.ref_audio_var = tk.StringVar()
+        self.ref_audio_entry = ttk.Entry(self.sovits_frame, textvariable=self.ref_audio_var, width=40)
+        self.ref_audio_entry.grid(row=0, column=1, padx=5, pady=5, sticky="ew")
+        ttk.Button(self.sovits_frame, text="Browse", command=self.browse_audio_file).grid(row=0, column=2, padx=5, pady=5)
+        
+        # Reference text for the audio
+        ttk.Label(self.sovits_frame, text="Reference Text:").grid(row=1, column=0, sticky="nw", padx=5, pady=5)
+        self.ref_text_var = tk.StringVar()
+        self.ref_text_entry = tk.Text(self.sovits_frame, height=3, width=40)
+        self.ref_text_entry.grid(row=1, column=1, padx=5, pady=5, sticky="ew")
+        
+        # Audio analysis section
+        audio_tools_frame = ttk.Frame(self.sovits_frame)
+        audio_tools_frame.grid(row=2, column=0, columnspan=3, sticky="ew", padx=5, pady=10)
+        
+        ttk.Label(audio_tools_frame, text="Reference Audio Tools:").pack(anchor="w")
+        
+        # Audio tools
+        tools_frame = ttk.Frame(audio_tools_frame)
+        tools_frame.pack(fill="x", pady=5)
+        
+        self.play_ref_button = ttk.Button(tools_frame, text="▶️ Play Reference", command=self.play_reference_audio)
+        self.play_ref_button.pack(side="left", padx=5)
+        
+        self.transcribe_ref_button = ttk.Button(tools_frame, text="📝 Auto-Transcribe Reference", command=self.transcribe_reference_audio)
+        self.transcribe_ref_button.pack(side="left", padx=5)
+        
+        # Status label
+        self.audio_status = tk.Label(audio_tools_frame, text="Select reference audio file to enable tools", fg="gray")
+        self.audio_status.pack(anchor="w", pady=5)
+        
+        # Language settings
+        lang_frame = ttk.Frame(self.sovits_frame)
+        lang_frame.grid(row=3, column=0, columnspan=3, sticky="ew", padx=5, pady=5)
+        
+        ttk.Label(lang_frame, text="Text Language:").pack(side="left")
+        self.text_lang_var = tk.StringVar(value="en")
+        text_lang_combo = ttk.Combobox(lang_frame, textvariable=self.text_lang_var, 
+                                      values=["en", "zh", "ja", "ko"], state="readonly", width=5)
+        text_lang_combo.pack(side="left", padx=5)
+        
+        ttk.Label(lang_frame, text="Prompt Language:").pack(side="left", padx=(20,0))
+        self.prompt_lang_var = tk.StringVar(value="en")
+        prompt_lang_combo = ttk.Combobox(lang_frame, textvariable=self.prompt_lang_var, 
+                                        values=["en", "zh", "ja", "ko"], state="readonly", width=5)
+        prompt_lang_combo.pack(side="left", padx=5)
+        
+        self.sovits_frame.columnconfigure(1, weight=1)
+        
         # Info text
         info_frame = ttk.LabelFrame(self.root, text="Setup Instructions")
         info_frame.pack(pady=10, padx=20, fill="both", expand=True)
@@ -174,6 +235,19 @@ class ProviderSetupGUI:
         
         self.input_device_var.set(input_name)
         self.output_device_var.set(output_name)
+        
+        # Load GPT-SoVITS settings
+        sovits_config = self.config.get('sovits_ping_config', {})
+        self.ref_audio_var.set(sovits_config.get('ref_audio_path', ''))
+        
+        # Load reference text
+        ref_text = sovits_config.get('prompt_text', '')
+        self.ref_text_entry.delete("1.0", tk.END)
+        self.ref_text_entry.insert("1.0", ref_text)
+        
+        # Load language settings
+        self.text_lang_var.set(sovits_config.get('text_lang', 'en'))
+        self.prompt_lang_var.set(sovits_config.get('prompt_lang', 'en'))
         
         # Update info text
         self.info_text.delete("1.0", tk.END)
@@ -236,6 +310,15 @@ class ProviderSetupGUI:
         self.config['audio_config']['input_device_name'] = input_device_selection
         self.config['audio_config']['output_device_name'] = output_device_selection
         
+        # Save GPT-SoVITS settings
+        if 'sovits_ping_config' not in self.config:
+            self.config['sovits_ping_config'] = {}
+        
+        self.config['sovits_ping_config']['ref_audio_path'] = self.ref_audio_var.get()
+        self.config['sovits_ping_config']['prompt_text'] = self.ref_text_entry.get("1.0", tk.END).strip()
+        self.config['sovits_ping_config']['text_lang'] = self.text_lang_var.get()
+        self.config['sovits_ping_config']['prompt_lang'] = self.prompt_lang_var.get()
+        
         # Validate required fields
         if not self.api_key_var.get() and provider != 'ollama':
             messagebox.showerror("Error", "API Key is required for this provider!")
@@ -279,6 +362,73 @@ class ProviderSetupGUI:
             self.output_device_var.set("Default")
         
         messagebox.showinfo("Devices Refreshed", "Audio device list has been updated!")
+    
+    def browse_audio_file(self):
+        """Browse for reference audio file"""
+        file_path = filedialog.askopenfilename(
+            title="Select Reference Audio File",
+            filetypes=[("Audio files", "*.wav *.mp3 *.flac *.m4a"), ("All files", "*.*")]
+        )
+        if file_path:
+            self.ref_audio_var.set(file_path)
+            self.current_audio_file = file_path
+            self.audio_status.config(text=f"Audio file selected: {Path(file_path).name}", fg="green")
+    
+    def play_reference_audio(self):
+        """Play the selected reference audio file"""
+        audio_file = self.ref_audio_var.get()
+        if not audio_file or not os.path.exists(audio_file):
+            messagebox.showerror("Error", "Please select a valid reference audio file first!")
+            return
+            
+        try:
+            # Load and play the audio file
+            audio_data, sample_rate = sf.read(audio_file)
+            
+            # Get selected output device
+            output_device_name = self.output_device_var.get()
+            output_device_id = None
+            
+            if output_device_name != "Default":
+                for device in self.output_devices:
+                    if device['name'] == output_device_name:
+                        output_device_id = device['id']
+                        break
+            
+            sd.play(audio_data, samplerate=sample_rate, device=output_device_id)
+            self.audio_status.config(text="Playing reference audio...", fg="blue")
+            
+        except Exception as e:
+            messagebox.showerror("Playback Error", f"Failed to play audio: {str(e)}")
+    
+    def transcribe_reference_audio(self):
+        """Transcribe the reference audio file using Whisper"""
+        audio_file = self.ref_audio_var.get()
+        if not audio_file or not os.path.exists(audio_file):
+            messagebox.showerror("Error", "Please select a valid reference audio file first!")
+            return
+            
+        try:
+            self.audio_status.config(text="Transcribing reference audio...", fg="blue")
+            self.root.update()
+            
+            # Load Whisper model and transcribe
+            from faster_whisper import WhisperModel
+            model = WhisperModel("base.en", device="cpu", compute_type="float32")
+            
+            segments, _ = model.transcribe(audio_file)
+            transcription = " ".join([segment.text for segment in segments])
+            
+            # Update the reference text field
+            self.ref_text_entry.delete("1.0", tk.END)
+            self.ref_text_entry.insert("1.0", transcription.strip())
+            
+            self.audio_status.config(text=f"Transcribed: {transcription[:50]}...", fg="green")
+            messagebox.showinfo("Transcription Complete", f"Reference audio transcribed successfully!\n\nText: {transcription}")
+            
+        except Exception as e:
+            messagebox.showerror("Transcription Error", f"Failed to transcribe: {str(e)}")
+            self.audio_status.config(text="Transcription failed", fg="red")
     
     def run(self):
         self.root.mainloop()

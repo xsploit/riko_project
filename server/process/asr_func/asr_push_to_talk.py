@@ -130,12 +130,12 @@ def record_and_transcribe(model, output_file="recording.wav", samplerate=44100):
     print("⏹️  Saving audio...")
     
     # Write the file
-    sf.write(output_file, recording, samplerate)
+    sf.write(str(output_file), recording, samplerate)
     
     print("🎯 Transcribing...")
     
     # Transcribe
-    segments, _ = model.transcribe(output_file)
+    segments, _ = model.transcribe(str(output_file))
     transcription = " ".join([segment.text for segment in segments])
     
     print(f"Transcription: {transcription}")

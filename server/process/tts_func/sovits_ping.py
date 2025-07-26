@@ -10,9 +10,10 @@ from pathlib import Path
 project_root = Path(__file__).parent.parent.parent.parent
 config_path = project_root / 'character_config.yaml'
 
-# Load YAML config
-with open(config_path, 'r') as f:
-    char_config = yaml.safe_load(f)
+def load_config():
+    """Load config fresh each time"""
+    with open(config_path, 'r') as f:
+        return yaml.safe_load(f)
 
 
 def get_output_device_config():
@@ -23,6 +24,7 @@ def get_output_device_config():
         sys.path.append(str(Path(__file__).parent.parent.parent))
         from audio_utils import find_device_by_name, validate_device_name
         
+        char_config = load_config()
         audio_config = char_config.get('audio_config', {})
         output_name = audio_config.get('output_device_name', 'Default')
         
@@ -60,6 +62,9 @@ def play_audio(path):
         print(f"Error playing audio: {e}")
 
 def sovits_gen(in_text, output_wav_pth = "output.wav"):
+    # Load fresh config each time
+    char_config = load_config()
+    
     # Check if TTS is enabled
     tts_enabled = char_config.get('tts_enabled', True)
     if not tts_enabled:
@@ -69,26 +74,67 @@ def sovits_gen(in_text, output_wav_pth = "output.wav"):
     
     url = "http://127.0.0.1:9880/tts"
 
+    # Convert language codes to API format
+    text_lang = char_config['sovits_ping_config']['text_lang'].lower()
+    prompt_lang = char_config['sovits_ping_config']['prompt_lang'].lower()
+    
+    # Map language codes if needed
+    lang_map = {
+        'en': 'en',
+        'zh': 'zh', 
+        'ja': 'ja',
+        'ko': 'ko'
+    }
+    
+    text_lang = lang_map.get(text_lang, 'en')
+    prompt_lang = lang_map.get(prompt_lang, 'en')
+
     payload = {
         "text": in_text,
-        "text_lang": char_config['sovits_ping_config']['text_lang'],
-        "ref_audio_path": char_config['sovits_ping_config']['ref_audio_path'],  # Make sure this path is valid
+        "text_lang": text_lang,
+        "ref_audio_path": char_config['sovits_ping_config']['ref_audio_path'],
         "prompt_text": char_config['sovits_ping_config']['prompt_text'],
-        "prompt_lang": char_config['sovits_ping_config']['prompt_lang']
+        "prompt_lang": prompt_lang,
+        "top_k": 5,
+        "top_p": 1.0,
+        "temperature": 1.0,
+        "text_split_method": "cut0",
+        "batch_size": 1,
+        "batch_threshold": 0.75,
+        "split_bucket": True,
+        "speed_factor": 1.0,
+        "fragment_interval": 0.3,
+        "seed": -1,
+        "media_type": "wav",
+        "streaming_mode": False,
+        "parallel_infer": True,
+        "repetition_penalty": 1.35
     }
 
     try:
-        response = requests.post(url, json=payload, timeout=5)
+        response = requests.post(url, json=payload, timeout=30)
         response.raise_for_status()  # throws if not 200
 
-        print(response)
-
-        # Save the response audio if it's binary
-        with open(output_wav_pth, "wb") as f:
-            f.write(response.content)
-        # print("Audio saved as output.wav")
-
-        return output_wav_pth
+        print(f"TTS Response Status: {response.status_code}")
+        
+        # Check response content type
+        content_type = response.headers.get('content-type', '')
+        print(f"Response Content-Type: {content_type}")
+        
+        if response.status_code == 200 and 'audio' in content_type:
+            # Save the response audio if it's binary
+            with open(output_wav_pth, "wb") as f:
+                f.write(response.content)
+            print(f"✅ Audio saved to: {output_wav_pth}")
+            return output_wav_pth
+        else:
+            # Try to parse error response
+            try:
+                error_data = response.json()
+                print(f"❌ TTS API Error: {error_data}")
+            except:
+                print(f"❌ TTS API Error: Status {response.status_code}, Content: {response.text[:200]}")
+            return None
 
     except Exception as e:
         print("Error in sovits_gen:", e)

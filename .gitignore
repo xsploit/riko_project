@@ -69,3 +69,5 @@ cache/
 # Temporary files
 tmp/
 temp/
+api_v2.py
+inference_cli copy 2.py
