@@ -4,18 +4,69 @@ import time
 import soundfile as sf 
 import sounddevice as sd
 import yaml
+from pathlib import Path
+
+# Get the project root directory (3 levels up from this file)
+project_root = Path(__file__).parent.parent.parent.parent
+config_path = project_root / 'character_config.yaml'
 
 # Load YAML config
-with open('character_config.yaml', 'r') as f:
+with open(config_path, 'r') as f:
     char_config = yaml.safe_load(f)
 
 
+def get_output_device_config():
+    """Get the configured output device"""
+    try:
+        from pathlib import Path
+        import sys
+        sys.path.append(str(Path(__file__).parent.parent.parent))
+        from audio_utils import find_device_by_name, validate_device_name
+        
+        audio_config = char_config.get('audio_config', {})
+        output_name = audio_config.get('output_device_name', 'Default')
+        
+        # Validate and get ID
+        if output_name == "Default" or not validate_device_name(output_name, 'output'):
+            if output_name != "Default":
+                print(f"⚠️  Configured output device '{output_name}' invalid, using default")
+            return None
+        
+        return find_device_by_name(output_name, 'output')
+    except Exception as e:
+        print(f"Error getting output device config: {e}")
+        return None
+
 def play_audio(path):
-    data, samplerate = sf.read(path)
-    sd.play(data, samplerate)
-    sd.wait()  # Wait until playback is finished
+    if path is None or not Path(path).exists():
+        print("No audio file to play or TTS disabled")
+        return
+    
+    # Get configured output device
+    output_device_id = get_output_device_config()
+    
+    try:
+        data, samplerate = sf.read(path)
+        # Try to play with configured device
+        try:
+            sd.play(data, samplerate, device=output_device_id)
+            sd.wait()  # Wait until playback is finished
+        except Exception as e:
+            print(f"Playback error with device {output_device_id}: {e}")
+            print("Falling back to default output device...")
+            sd.play(data, samplerate)  # Fallback to default
+            sd.wait()
+    except Exception as e:
+        print(f"Error playing audio: {e}")
 
 def sovits_gen(in_text, output_wav_pth = "output.wav"):
+    # Check if TTS is enabled
+    tts_enabled = char_config.get('tts_enabled', True)
+    if not tts_enabled:
+        print("TTS disabled, skipping audio generation")
+        # Create a dummy audio file or return None
+        return None
+    
     url = "http://127.0.0.1:9880/tts"
 
     payload = {
@@ -27,7 +78,7 @@ def sovits_gen(in_text, output_wav_pth = "output.wav"):
     }
 
     try:
-        response = requests.post(url, json=payload)
+        response = requests.post(url, json=payload, timeout=5)
         response.raise_for_status()  # throws if not 200
 
         print(response)
@@ -41,6 +92,7 @@ def sovits_gen(in_text, output_wav_pth = "output.wav"):
 
     except Exception as e:
         print("Error in sovits_gen:", e)
+        print("TTS server not running. Start GPT-SoVITS server or disable TTS in config.")
         return None
 
 

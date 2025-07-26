@@ -4,16 +4,31 @@ import yaml
 import gradio as gr
 import json
 import os
+from pathlib import Path
 from openai import OpenAI
 
-with open('character_config.yaml', 'r') as f:
+# Get the project root directory (3 levels up from this file)
+project_root = Path(__file__).parent.parent.parent.parent
+config_path = project_root / 'character_config.yaml'
+
+with open(config_path, 'r') as f:
     char_config = yaml.safe_load(f)
 
-client = OpenAI(api_key=char_config['OPENAI_API_KEY'])
+# Get current provider configuration
+current_provider = char_config['provider']
+provider_config = char_config['providers'][current_provider]
+
+# Export for validation
+__all__ = ['char_config', 'provider_config', 'llm_response']
+
+client = OpenAI(
+    api_key=provider_config['api_key'],
+    base_url=provider_config['base_url']
+)
 
 # Constants
-HISTORY_FILE = char_config['history_file']
-MODEL = char_config['model']
+HISTORY_FILE = project_root / char_config['history_file']
+MODEL = provider_config['model']
 SYSTEM_PROMPT =  [
         {
             "role": "system",
@@ -41,19 +56,33 @@ def save_history(history):
 
 def get_riko_response_no_tool(messages):
 
-    # Call OpenAI with system prompt + history
-    response = client.responses.create(
+    # Convert to OpenAI-compatible format
+    openai_messages = []
+    for msg in messages:
+        if msg['role'] == 'system':
+            openai_messages.append({
+                'role': 'system',
+                'content': msg['content'][0]['text']
+            })
+        elif msg['role'] == 'user':
+            openai_messages.append({
+                'role': 'user', 
+                'content': msg['content'][0]['text']
+            })
+        elif msg['role'] == 'assistant':
+            openai_messages.append({
+                'role': 'assistant',
+                'content': msg['content'][0]['text']
+            })
+    
+    # Call OpenAI-compatible API
+    response = client.chat.completions.create(
         model=MODEL,
-        input= messages,
+        messages=openai_messages,
         temperature=1,
         top_p=1,
-        max_output_tokens=2048,
-        stream=False,
-        text={
-            "format": {
-            "type": "text"
-            }
-        },
+        max_tokens=2048,
+        stream=False
     )
 
     return response
@@ -79,12 +108,12 @@ def llm_response(user_input):
     messages.append({
     "role": "assistant",
     "content": [
-        {"type": "output_text", "text": riko_test_response.output_text}
+        {"type": "output_text", "text": riko_test_response.choices[0].message.content}
     ]
     })
 
     save_history(messages)
-    return riko_test_response.output_text
+    return riko_test_response.choices[0].message.content
 
 
 if __name__ == "__main__":

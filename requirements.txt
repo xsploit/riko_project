@@ -22,6 +22,7 @@ peft
 chardet
 PyYAML
 psutil
+keyboard
 jieba_fast
 jieba
 split-lang
