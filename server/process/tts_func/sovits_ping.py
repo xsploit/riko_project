@@ -61,6 +61,36 @@ def play_audio(path):
     except Exception as e:
         print(f"Error playing audio: {e}")
 
+def clean_text_for_tts(text):
+    """Clean text for better TTS synthesis"""
+    import re
+    
+    # Remove markdown formatting
+    text = re.sub(r'\*\*([^*]+)\*\*', r'\1', text)  # **bold** → bold
+    text = re.sub(r'\*([^*]+)\*', r'\1', text)      # *italic* → italic
+    
+    # Remove other formatting
+    text = re.sub(r'#{1,6}\s*', '', text)           # Remove headers
+    text = re.sub(r'`([^`]+)`', r'\1', text)        # `code` → code
+    
+    # Clean up extra whitespace
+    text = re.sub(r'\s+', ' ', text)                # Multiple spaces → single space
+    text = text.strip()
+    
+    # Limit length for faster synthesis
+    if len(text) > 500:
+        # Split at sentence boundaries and take first part
+        sentences = text.split('.')
+        result = ""
+        for sentence in sentences:
+            if len(result + sentence) < 400:
+                result += sentence + ". "
+            else:
+                break
+        text = result.strip()
+    
+    return text
+
 def sovits_gen(in_text, output_wav_pth = "output.wav"):
     # Load fresh config each time
     char_config = load_config()
@@ -70,6 +100,14 @@ def sovits_gen(in_text, output_wav_pth = "output.wav"):
     if not tts_enabled:
         print("TTS disabled, skipping audio generation")
         # Create a dummy audio file or return None
+        return None
+    
+    # Clean text for better TTS
+    clean_text = clean_text_for_tts(in_text)
+    print(f"🧹 Cleaned TTS text: {clean_text[:100]}...")
+    
+    if not clean_text.strip():
+        print("No text to synthesize after cleaning")
         return None
     
     url = "http://127.0.0.1:9880/tts"
@@ -90,7 +128,7 @@ def sovits_gen(in_text, output_wav_pth = "output.wav"):
     prompt_lang = lang_map.get(prompt_lang, 'en')
 
     payload = {
-        "text": in_text,
+        "text": clean_text,
         "text_lang": text_lang,
         "ref_audio_path": char_config['sovits_ping_config']['ref_audio_path'],
         "prompt_text": char_config['sovits_ping_config']['prompt_text'],
