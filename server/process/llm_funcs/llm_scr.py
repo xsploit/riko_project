@@ -105,6 +105,23 @@ def llm_response(user_input):
     )
 
     messages = load_history()
+    
+    # Debug: Print current history length
+    print(f"📚 Current history length: {len(messages)} messages")
+    
+    # Limit history to prevent context overflow and repetition
+    MAX_HISTORY = 20  # Keep last 20 messages (10 exchanges)
+    if len(messages) > MAX_HISTORY:
+        # Keep system prompt and last MAX_HISTORY-1 messages
+        system_msg = messages[0] if messages and messages[0].get('role') == 'system' else None
+        recent_messages = messages[-(MAX_HISTORY-1):] if system_msg else messages[-MAX_HISTORY:]
+        
+        if system_msg:
+            messages = [system_msg] + recent_messages
+        else:
+            messages = recent_messages
+        
+        print(f"🔄 Trimmed history to {len(messages)} messages")
 
     # Append user message to memory
     messages.append({
@@ -114,20 +131,30 @@ def llm_response(user_input):
         ]
     })
 
+    # Debug: Print the last few messages being sent
+    print(f"🤖 Sending {len(messages)} messages to LLM")
+    
+    try:
+        riko_test_response = get_riko_response_no_tool(messages, client, provider_config['model'])
+        response_text = riko_test_response.choices[0].message.content
+        
+        # Debug: Print response length
+        print(f"📝 Generated response: {len(response_text)} characters")
+        
+        # just append assistant message to regular response. 
+        messages.append({
+        "role": "assistant",
+        "content": [
+            {"type": "output_text", "text": response_text}
+        ]
+        })
 
-    riko_test_response = get_riko_response_no_tool(messages, client, provider_config['model'])
-
-
-    # just append assistant message to regular response. 
-    messages.append({
-    "role": "assistant",
-    "content": [
-        {"type": "output_text", "text": riko_test_response.choices[0].message.content}
-    ]
-    })
-
-    save_history(messages)
-    return riko_test_response.choices[0].message.content
+        save_history(messages)
+        return response_text
+        
+    except Exception as e:
+        print(f"❌ LLM Generation Error: {e}")
+        return "Sorry senpai, I'm having trouble thinking right now. Maybe try asking something else?"
 
 
 if __name__ == "__main__":

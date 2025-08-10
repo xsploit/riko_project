@@ -1,6 +1,6 @@
 audio_config:
   input_device_name: Microphone (Realtek(R) Audio)
-  output_device_name: CABLE-B Input (VB-Audio Cable B
+  output_device_name: CABLE-B Input (VB-Audio Cable B)
 history_file: chat_history.json
 presets:
   default:
@@ -37,7 +37,7 @@ providers:
   ollama:
     api_key: ollama
     base_url: http://localhost:11434/v1
-    model: llama3.1:8B
+    model: hf.co/subsectmusic/qwriko3-4b-instruct-2507:Q4_K_M
   openai:
     api_key: sk-YOURAPIKEY
     base_url: https://api.openai.com/v1
@@ -48,8 +48,8 @@ providers:
     model: meta-llama/llama-3.1-8b-instruct:free
 sovits_ping_config:
   prompt_lang: en
-  prompt_text: Will I always be a failure?  Naruto. Are you okay?  I won't run away.
-    Never again.  I'm looking forward to this.  I... I challenge you.
-  ref_audio_path: C:/Users/SUBSECT/Desktop/hinata3.wav
+  prompt_text: This is a sample voice for you to just get started with, because it
+    sounds kind of cute.  But just make sure this doesn't have long silences.
+  ref_audio_path: C:/Users/SUBSECT/Documents/GitHub/riko_project/character_files/main_sample.wav
   text_lang: en
 tts_enabled: true
